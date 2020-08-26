@@ -34,7 +34,7 @@ object HotItems {
     environment.setParallelism(1)
     environment.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     //从文件读取数据
-//    val inputStream: DataStream[String] = environment.readTextFile("/Users/anluyao/workspace/UserBehaviorAnalysis/HotItemsAnalysis/src/main/resources/UserBehavior.csv")
+    //    val inputStream: DataStream[String] = environment.readTextFile("/Users/anluyao/workspace/UserBehaviorAnalysis/HotItemsAnalysis/src/main/resources/UserBehavior.csv")
     //从kafka读取数据
     val properties = new Properties()
     properties.setProperty("bootstrap.servers", "localhost:9092")
@@ -42,9 +42,7 @@ object HotItems {
     properties.setProperty("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
     properties.setProperty("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
     properties.setProperty("auto.offset.reset", "latest")
-    val inputStream: DataStream[String] = environment.addSource(new FlinkKafkaConsumer[String]("hotitems",new SimpleStringSchema(),properties))
-
-
+    val inputStream: DataStream[String] = environment.addSource(new FlinkKafkaConsumer[String]("hotitems", new SimpleStringSchema(), properties))
 
 
     //将数据转换为样例类，提取时间戳并且定义watermark
@@ -85,6 +83,22 @@ class CountAgg() extends AggregateFunction[UserBehavior, Long, Long] {
 
   override def merge(acc: Long, acc1: Long): Long = acc + acc1
 }
+
+/**
+  * 扩展：自定义求平均值的聚合函数,状态为(sum,count)
+  */
+class AvgAgg() extends AggregateFunction[UserBehavior, (Long, Int), Double] {
+  override def createAccumulator(): (Long, Int) = (0L, 0)
+
+  override def add(in: UserBehavior, acc: (Long, Int)): (Long, Int) =
+    (acc._1 + in.timestamp, acc._2 + 1)
+
+  override def getResult(acc: (Long, Int)): Double = acc._1 / acc._2.toDouble
+
+  override def merge(acc: (Long, Int), acc1: (Long, Int)): (Long, Int) =
+    (acc._1 + acc1._2, acc._2 + acc1._2)
+}
+
 
 //自定义窗口函数，结合window信息包装成样例类
 class ItemCountWindowResult() extends WindowFunction[Long, ItemViewCount, Tuple, TimeWindow] {
